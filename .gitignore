@@ -1,0 +1,61 @@
+# Project specific
+HELP.md
+
+# Java
+*.class
+
+# Log files
+*.log
+
+# Maven
+target/
+!.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+.mvn/wrapper/maven-wrapper.properties
+
+# IntelliJ / Eclipse / VS Code
+.idea/
+*.iws
+*.iml
+*.ipr
+.project
+.classpath
+.factorypath
+.settings/
+.springBeans
+.sts4-cache
+.apt_generated
+.vscode/
+
+# OS-specific
+.DS_Store
+Thumbs.db
+
+# Build tools
+/build/
+!**/src/main/**/build/
+!**/src/test/**/build/
+out/
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+
+# Test reports
+surefire-reports/
+test-output/
+
+### Environment Variables ###
+# .env
+# .env.*
+# !.env.example
+
+
+# Keys
+*.pem
+
+# Keycloak installation (large binary files)
+keycloak-26.0.5/
+keycloak.tar.gz
