@@ -10,7 +10,8 @@ COPY . .
 RUN mvn clean install -pl ${BUILD_MODULES} -am -DskipTests
 
 # Build the selected service and create a runnable jar
-RUN mvn -pl ${SERVICE_NAME} -am clean package spring-boot:repackage -DskipTests
+RUN mvn -pl ${SERVICE_NAME} -am clean package -DskipTests
+RUN mvn -pl ${SERVICE_NAME} spring-boot:repackage -DskipTests
 RUN ls -la /build/${SERVICE_NAME}/target/
 
 FROM eclipse-temurin:17-jre
