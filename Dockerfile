@@ -1,13 +1,10 @@
 FROM maven:3.9-eclipse-temurin-17 AS build
 
-ARG SERVICE_NAME
+ARG SERVICE_NAME=product-service
 ARG BUILD_MODULES=user-api,product-api,payment-api,coupon-api
 
 WORKDIR /build
 COPY . .
-
-# Validate required argument
-RUN test -n "$SERVICE_NAME"
 
 # Build shared API modules first so dependent services can resolve them
 RUN mvn clean install -pl ${BUILD_MODULES} -am -DskipTests
@@ -18,7 +15,7 @@ RUN ls -la /build/${SERVICE_NAME}/target/
 
 FROM eclipse-temurin:17-jre
 
-ARG SERVICE_NAME
+ARG SERVICE_NAME=product-service
 ARG SERVICE_PORT=8080
 
 WORKDIR /app
