@@ -4,9 +4,6 @@ set -euo pipefail
 
 LOG_DIR="${LOG_DIR:-/tmp/mankind-logs}"
 SERVICE_DIR="/opt/mankind/services"
-WAIT_SLEEP_SECONDS="${WAIT_SLEEP_SECONDS:-2}"
-KEYCLOAK_WAIT_ATTEMPTS="${KEYCLOAK_WAIT_ATTEMPTS:-180}"
-SERVICE_WAIT_ATTEMPTS="${SERVICE_WAIT_ATTEMPTS:-120}"
 
 mkdir -p "$LOG_DIR"
 
@@ -15,6 +12,7 @@ export KEYCLOAK_URL="${KEYCLOAK_URL:-http://127.0.0.1:${KEYCLOAK_PORT}}"
 export ADMIN_USERNAME="${ADMIN_USERNAME:-${KEYCLOAK_ADMIN:-admin}}"
 export ADMIN_PASSWORD="${ADMIN_PASSWORD:-${KEYCLOAK_ADMIN_PASSWORD:-admin}}"
 export APP_SECURITY_OAUTH2_ENABLED="${APP_SECURITY_OAUTH2_ENABLED:-false}"
+export APP_SECURITY_DEV_USER_ID="${APP_SECURITY_DEV_USER_ID:-1}"
 
 export USER_SERVICE_URL="${USER_SERVICE_URL:-http://127.0.0.1:8081}"
 export PRODUCT_SERVICE_URL="${PRODUCT_SERVICE_URL:-http://127.0.0.1:8080}"
@@ -27,7 +25,19 @@ export ORDER_SERVICE_URL="${ORDER_SERVICE_URL:-http://127.0.0.1:8088}"
 
 export APP_CORS_ALLOWED_ORIGIN_PATTERNS="${APP_CORS_ALLOWED_ORIGIN_PATTERNS:-http://localhost:3000,http://127.0.0.1:3000,https://*.vercel.app,https://*.onrender.com}"
 
-COMMON_JAVA_OPTS="${COMMON_JAVA_OPTS:- -Xms16m -Xmx96m -XX:MaxMetaspaceSize=64m -XX:+UseSerialGC }"
+export START_USER_SERVICE="${START_USER_SERVICE:-false}"
+export START_PRODUCT_SERVICE="${START_PRODUCT_SERVICE:-true}"
+export START_CART_SERVICE="${START_CART_SERVICE:-true}"
+export START_WISHLIST_SERVICE="${START_WISHLIST_SERVICE:-true}"
+export START_PAYMENT_SERVICE="${START_PAYMENT_SERVICE:-false}"
+export START_NOTIFICATION_SERVICE="${START_NOTIFICATION_SERVICE:-false}"
+export START_COUPON_SERVICE="${START_COUPON_SERVICE:-false}"
+export START_ORDER_SERVICE="${START_ORDER_SERVICE:-false}"
+
+DEFAULT_JAVA_OPTS="${DEFAULT_JAVA_OPTS:- -Xms16m -Xmx48m -XX:MaxMetaspaceSize=48m -XX:+UseSerialGC }"
+GATEWAY_JAVA_OPTS="${GATEWAY_JAVA_OPTS:- -Xms16m -Xmx72m -XX:MaxMetaspaceSize=64m -XX:+UseSerialGC }"
+PRODUCT_JAVA_OPTS="${PRODUCT_JAVA_OPTS:- -Xms16m -Xmx72m -XX:MaxMetaspaceSize=64m -XX:+UseSerialGC }"
+USER_JAVA_OPTS="${USER_JAVA_OPTS:- -Xms16m -Xmx56m -XX:MaxMetaspaceSize=48m -XX:+UseSerialGC }"
 
 for required_var in DB_HOST DB_NAME DB_USERNAME DB_PASSWORD; do
   if [ -z "${!required_var:-}" ]; then
@@ -44,102 +54,39 @@ cleanup() {
 
 trap cleanup EXIT
 
-print_log_tail() {
-  local file="$1"
-  local label="$2"
-
-  if [ -f "${file}" ]; then
-    echo "----- ${label} log tail -----" >&2
-    tail -n 200 "${file}" >&2 || true
-    echo "----- end ${label} log tail -----" >&2
-  else
-    echo "${label} log file not found at ${file}" >&2
-  fi
-}
-
-wait_for_tcp_port() {
-  local host="$1"
-  local port="$2"
-  local label="$3"
-  local attempt_limit="$4"
-  local pid="${5:-}"
-  local log_file="${6:-}"
-  local attempt=0
-
-  while [ "${attempt}" -lt "${attempt_limit}" ]; do
-    if (echo >"/dev/tcp/${host}/${port}") >/dev/null 2>&1; then
-      echo "${label} is reachable on ${host}:${port}"
-      return 0
-    fi
-    if [ -n "${pid}" ] && ! kill -0 "${pid}" >/dev/null 2>&1; then
-      echo "${label} exited before opening ${host}:${port}" >&2
-      print_log_tail "${log_file}" "${label}"
-      return 1
-    fi
-    attempt=$((attempt + 1))
-    sleep "${WAIT_SLEEP_SECONDS}"
-  done
-
-  echo "${label} did not open ${host}:${port} in time" >&2
-  print_log_tail "${log_file}" "${label}"
-  return 1
-}
-
-wait_for_http_ok() {
-  local host="$1"
-  local port="$2"
-  local path="$3"
-  local label="$4"
-  local attempt_limit="$5"
-  local pid="${6:-}"
-  local log_file="${7:-}"
-  local attempt=0
-
-  while [ "${attempt}" -lt "${attempt_limit}" ]; do
-    if exec 3<>"/dev/tcp/${host}/${port}" 2>/dev/null; then
-      printf 'GET %s HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n' "${path}" "${host}" >&3
-      if IFS= read -r response <&3 && [[ "${response}" == *"200"* ]]; then
-        exec 3<&-
-        exec 3>&-
-        echo "${label} responded with HTTP 200 on ${path}"
-        return 0
-      fi
-      exec 3<&-
-      exec 3>&-
-    fi
-    if [ -n "${pid}" ] && ! kill -0 "${pid}" >/dev/null 2>&1; then
-      echo "${label} exited before becoming ready on ${path}" >&2
-      print_log_tail "${log_file}" "${label}"
-      return 1
-    fi
-    attempt=$((attempt + 1))
-    sleep "${WAIT_SLEEP_SECONDS}"
-  done
-
-  echo "${label} did not become ready on ${path}" >&2
-  print_log_tail "${log_file}" "${label}"
-  return 1
-}
-
 start_service() {
   local name="$1"
   local port="$2"
   local jar="$3"
+  local java_opts="${4:-${DEFAULT_JAVA_OPTS}}"
 
   echo "Starting ${name} on port ${port}"
-  java ${COMMON_JAVA_OPTS} -Dserver.port="${port}" -jar "${jar}" >"${LOG_DIR}/${name}.log" 2>&1 &
-  LAST_STARTED_PID=$!
+  java ${java_opts} -Dserver.port="${port}" -jar "${jar}" >"${LOG_DIR}/${name}.log" 2>&1 &
 }
 
-start_service "user-service" "8081" "${SERVICE_DIR}/user-service.jar"
-start_service "product-service" "8080" "${SERVICE_DIR}/product-service.jar"
-start_service "cart-service" "8082" "${SERVICE_DIR}/cart-service.jar"
-start_service "wishlist-service" "8083" "${SERVICE_DIR}/wishlist-service.jar"
-start_service "payment-service" "8084" "${SERVICE_DIR}/payment-service.jar"
-start_service "notification-service" "8086" "${SERVICE_DIR}/notification-service.jar"
-start_service "coupon-service" "8087" "${SERVICE_DIR}/coupon-service.jar"
-start_service "order-service" "8088" "${SERVICE_DIR}/order-service.jar"
+start_if_enabled() {
+  local enabled="$1"
+  local name="$2"
+  local port="$3"
+  local jar="$4"
+  local java_opts="${5:-${DEFAULT_JAVA_OPTS}}"
 
-echo "Starting services without Keycloak; auth is disabled by default"
+  if [ "${enabled}" = "true" ]; then
+    start_service "${name}" "${port}" "${jar}" "${java_opts}"
+  else
+    echo "Skipping ${name}"
+  fi
+}
+
+start_if_enabled "${START_USER_SERVICE}" "user-service" "8081" "${SERVICE_DIR}/user-service.jar" "${USER_JAVA_OPTS}"
+start_if_enabled "${START_PRODUCT_SERVICE}" "product-service" "8080" "${SERVICE_DIR}/product-service.jar" "${PRODUCT_JAVA_OPTS}"
+start_if_enabled "${START_CART_SERVICE}" "cart-service" "8082" "${SERVICE_DIR}/cart-service.jar" "${DEFAULT_JAVA_OPTS}"
+start_if_enabled "${START_WISHLIST_SERVICE}" "wishlist-service" "8083" "${SERVICE_DIR}/wishlist-service.jar" "${DEFAULT_JAVA_OPTS}"
+start_if_enabled "${START_PAYMENT_SERVICE}" "payment-service" "8084" "${SERVICE_DIR}/payment-service.jar" "${DEFAULT_JAVA_OPTS}"
+start_if_enabled "${START_NOTIFICATION_SERVICE}" "notification-service" "8086" "${SERVICE_DIR}/notification-service.jar" "${DEFAULT_JAVA_OPTS}"
+start_if_enabled "${START_COUPON_SERVICE}" "coupon-service" "8087" "${SERVICE_DIR}/coupon-service.jar" "${DEFAULT_JAVA_OPTS}"
+start_if_enabled "${START_ORDER_SERVICE}" "order-service" "8088" "${SERVICE_DIR}/order-service.jar" "${DEFAULT_JAVA_OPTS}"
+
+echo "Starting lightweight Render stack without Keycloak"
 echo "Starting gateway on Render port ${PORT:-8085}"
-exec java ${COMMON_JAVA_OPTS} -Dserver.port="${PORT:-8085}" -jar "${SERVICE_DIR}/mankind-gateway-service.jar"
+exec java ${GATEWAY_JAVA_OPTS} -Dserver.port="${PORT:-8085}" -jar "${SERVICE_DIR}/mankind-gateway-service.jar"
