@@ -2,7 +2,7 @@ server:
   port: 8080
 
 user-service:
-  url: ${USER_SERVICE_URL:http://user-service:8081}
+  url: ${USER_SERVICE_URL:http://localhost:8081}
 
 # Swagger/OpenAPI Configuration
 springdoc:
@@ -40,8 +40,8 @@ spring:
     oauth2:
       resourceserver:
         jwt:
-          issuer-uri: ${KEYCLOAK_URL:http://keycloak:8180}/realms/mankind
-          jwk-set-uri: ${KEYCLOAK_URL:http://keycloak:8180}/realms/mankind/protocol/openid-connect/certs
+          issuer-uri: ${KEYCLOAK_URL:http://localhost:8180}/realms/mankind
+          jwk-set-uri: ${KEYCLOAK_URL:http://localhost:8180}/realms/mankind/protocol/openid-connect/certs
   jpa:
     hibernate:
       ddl-auto: update

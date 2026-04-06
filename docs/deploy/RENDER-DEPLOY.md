@@ -1,5 +1,7 @@
 # Deploying Mankind Backend to Render.com (Simple Guide)
 
+For a single Render web service deployment that boots the full backend stack in one container, use [RENDER-SINGLE-SERVICE.md](./RENDER-SINGLE-SERVICE.md).
+
 ## 1. Prerequisites
 - You have a [Render.com](https://render.com) account.
 - Your database is already set up and connection details are in your `.env` file.

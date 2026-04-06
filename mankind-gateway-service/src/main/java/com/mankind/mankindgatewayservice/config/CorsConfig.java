@@ -11,20 +11,17 @@ import java.util.Arrays;
 @Configuration
 public class CorsConfig {
 
+    private final CorsSettings corsSettings;
+
+    public CorsConfig(CorsSettings corsSettings) {
+        this.corsSettings = corsSettings;
+    }
+
     @Bean
     public CorsWebFilter corsWebFilter() {
         CorsConfiguration corsConfig = new CorsConfiguration();
-        
-        // Allow specific origins
-        corsConfig.setAllowedOriginPatterns(Arrays.asList(
-            "http://localhost:3000",
-            "http://localhost:8085",
-            "http://127.0.0.1:8085",
-            "http://localhost:8080",
-            "http://localhost:8081",
-            "http://localhost:8082",
-            "http://localhost:8083"
-        ));
+
+        corsConfig.setAllowedOriginPatterns(corsSettings.getAllowedOriginPatterns());
         
         // Allow all HTTP methods
         corsConfig.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));

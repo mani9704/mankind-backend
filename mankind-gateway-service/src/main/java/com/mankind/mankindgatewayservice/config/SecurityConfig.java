@@ -15,22 +15,19 @@ import java.util.Arrays;
 @EnableWebFluxSecurity
 public class SecurityConfig {
 
+    private final CorsSettings corsSettings;
+
+    public SecurityConfig(CorsSettings corsSettings) {
+        this.corsSettings = corsSettings;
+    }
+
     @Bean
     SecurityWebFilterChain springSecurityFilterChain(ServerHttpSecurity http) {
         http
                 .csrf(csrf -> csrf.disable())
                 .cors(cors -> cors.configurationSource(request -> {
                     CorsConfiguration config = new CorsConfiguration();
-                    config.setAllowedOriginPatterns(Arrays.asList(
-                        "http://localhost:3000",
-                        "http://localhost:8085",
-                        "http://127.0.0.1:8085",
-                        "http://localhost:8080",
-                        "http://localhost:8081",
-                        "http://localhost:8082",
-                        "http://localhost:8083",
-                        "http://localhost:8088"
-                    ));
+                    config.setAllowedOriginPatterns(corsSettings.getAllowedOriginPatterns());
                     config.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
                     config.setAllowedHeaders(Arrays.asList("*"));
                     config.setAllowCredentials(true);
@@ -47,15 +44,24 @@ public class SecurityConfig {
                         .pathMatchers("/api/v1/users/me/**").authenticated()
                         
                         // Product service - public read access, protected write access
-                        .pathMatchers(HttpMethod.GET, "/api/v1/products/**").permitAll()  // All GET requests to products
-                        // Review by product - public
-                        .pathMatchers(HttpMethod.GET, "/api/v1/products/reviews/product/**").permitAll()
+                        .pathMatchers(HttpMethod.GET, "/api/v1/products", "/api/v1/products/**").permitAll()
+                        .pathMatchers(HttpMethod.GET, "/api/v1/categories", "/api/v1/categories/**").permitAll()
+                        .pathMatchers(HttpMethod.GET, "/api/v1/reviews/**").permitAll()
+                        .pathMatchers(HttpMethod.GET, "/api/v1/inventory/**").permitAll()
                         
                         // Protected product endpoints (require authentication for write operations)
-                        .pathMatchers(HttpMethod.POST, "/api/v1/products/**").authenticated()
+                        .pathMatchers(HttpMethod.POST, "/api/v1/products", "/api/v1/products/**").authenticated()
                         .pathMatchers(HttpMethod.PUT, "/api/v1/products/**").authenticated()
                         .pathMatchers(HttpMethod.DELETE, "/api/v1/products/**").authenticated()
                         .pathMatchers(HttpMethod.PATCH, "/api/v1/products/**").authenticated()
+                        .pathMatchers(HttpMethod.POST, "/api/v1/categories", "/api/v1/categories/**").authenticated()
+                        .pathMatchers(HttpMethod.PUT, "/api/v1/categories/**").authenticated()
+                        .pathMatchers(HttpMethod.DELETE, "/api/v1/categories/**").authenticated()
+                        .pathMatchers(HttpMethod.POST, "/api/v1/reviews", "/api/v1/reviews/**").authenticated()
+                        .pathMatchers(HttpMethod.PUT, "/api/v1/reviews/**").authenticated()
+                        .pathMatchers(HttpMethod.DELETE, "/api/v1/reviews/**").authenticated()
+                        .pathMatchers(HttpMethod.POST, "/api/v1/inventory", "/api/v1/inventory/**").authenticated()
+                        .pathMatchers(HttpMethod.PUT, "/api/v1/inventory/**").authenticated()
                         
                         // Protected endpoints (authentication required)
                         .pathMatchers("/api/v1/users/**").authenticated()  // Admin endpoints - just require authentication
@@ -66,6 +72,8 @@ public class SecurityConfig {
                         .pathMatchers("/api/v1/notifications/**").authenticated()
                         .pathMatchers("/api/v1/coupons/**").authenticated()  // Coupon service requires authentication
                         .pathMatchers("/api/v1/orders/**").authenticated()  // Order service requires authentication
+                        .pathMatchers("/api/v1/recently-viewed/**").authenticated()
+                        .pathMatchers("/api/v1/suppliers/**").authenticated()
                         
                         // Default: require authentication for any other endpoints
                         .anyExchange().authenticated()

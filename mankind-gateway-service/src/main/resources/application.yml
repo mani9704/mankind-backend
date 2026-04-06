@@ -59,12 +59,89 @@ spring:
           filters:
             - RewritePath=/api/v1/users/(?<segment>.*), /users/${segment}
           
+        - id: products-root
+          uri: ${PRODUCT_SERVICE_URL:http://localhost:8080}
+          predicates:
+            - Path=/api/v1/products
+          filters:
+            - SetPath=/products
+
         - id: products
           uri: ${PRODUCT_SERVICE_URL:http://localhost:8080}
           predicates:
             - Path=/api/v1/products/**
           filters:
-            - RewritePath=/api/v1/products/(?<segment>.*), /${segment}
+            - RewritePath=/api/v1/products/(?<segment>.*), /products/${segment}
+
+        - id: categories-root
+          uri: ${PRODUCT_SERVICE_URL:http://localhost:8080}
+          predicates:
+            - Path=/api/v1/categories
+          filters:
+            - SetPath=/categories
+
+        - id: categories
+          uri: ${PRODUCT_SERVICE_URL:http://localhost:8080}
+          predicates:
+            - Path=/api/v1/categories/**
+          filters:
+            - RewritePath=/api/v1/categories/(?<segment>.*), /categories/${segment}
+
+        - id: reviews-root
+          uri: ${PRODUCT_SERVICE_URL:http://localhost:8080}
+          predicates:
+            - Path=/api/v1/reviews
+          filters:
+            - SetPath=/reviews
+
+        - id: reviews
+          uri: ${PRODUCT_SERVICE_URL:http://localhost:8080}
+          predicates:
+            - Path=/api/v1/reviews/**
+          filters:
+            - RewritePath=/api/v1/reviews/(?<segment>.*), /reviews/${segment}
+
+        - id: inventory-root
+          uri: ${PRODUCT_SERVICE_URL:http://localhost:8080}
+          predicates:
+            - Path=/api/v1/inventory
+          filters:
+            - SetPath=/inventory
+
+        - id: inventory
+          uri: ${PRODUCT_SERVICE_URL:http://localhost:8080}
+          predicates:
+            - Path=/api/v1/inventory/**
+          filters:
+            - RewritePath=/api/v1/inventory/(?<segment>.*), /inventory/${segment}
+
+        - id: recently-viewed-root
+          uri: ${PRODUCT_SERVICE_URL:http://localhost:8080}
+          predicates:
+            - Path=/api/v1/recently-viewed
+          filters:
+            - SetPath=/recently-viewed
+
+        - id: recently-viewed
+          uri: ${PRODUCT_SERVICE_URL:http://localhost:8080}
+          predicates:
+            - Path=/api/v1/recently-viewed/**
+          filters:
+            - RewritePath=/api/v1/recently-viewed/(?<segment>.*), /recently-viewed/${segment}
+
+        - id: suppliers-root
+          uri: ${PRODUCT_SERVICE_URL:http://localhost:8080}
+          predicates:
+            - Path=/api/v1/suppliers
+          filters:
+            - SetPath=/suppliers
+
+        - id: suppliers
+          uri: ${PRODUCT_SERVICE_URL:http://localhost:8080}
+          predicates:
+            - Path=/api/v1/suppliers/**
+          filters:
+            - RewritePath=/api/v1/suppliers/(?<segment>.*), /suppliers/${segment}
           
         - id: cart
           uri: ${CART_SERVICE_URL:http://localhost:8082}
@@ -88,6 +165,13 @@ spring:
           filters:
             - RewritePath=/api/v1/coupons/(?<segment>.*), /coupons/${segment}
           
+        - id: wishlist-root
+          uri: ${WISHLIST_SERVICE_URL:http://localhost:8083}
+          predicates:
+            - Path=/api/v1/wishlist
+          filters:
+            - SetPath=/wishlist
+
         - id: wishlist
           uri: ${WISHLIST_SERVICE_URL:http://localhost:8083}
           predicates:
@@ -140,7 +224,7 @@ spring:
           jwk-set-uri: ${KEYCLOAK_URL:http://localhost:8180}/realms/mankind/protocol/openid-connect/certs
 
 server:
-  port: 8085
+  port: ${PORT:8085}
 
 #eureka:
 #  client:
