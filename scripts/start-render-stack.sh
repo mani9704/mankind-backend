@@ -10,7 +10,7 @@ SERVICE_WAIT_ATTEMPTS="${SERVICE_WAIT_ATTEMPTS:-120}"
 
 mkdir -p "$LOG_DIR"
 
-export KEYCLOAK_PORT="${KEYCLOAK_PORT:-8180}"
+export KEYCLOAK_PORT="${KEYCLOAK_PORT:-8080}"
 export KEYCLOAK_URL="${KEYCLOAK_URL:-http://127.0.0.1:${KEYCLOAK_PORT}}"
 export ADMIN_USERNAME="${ADMIN_USERNAME:-${KEYCLOAK_ADMIN:-admin}}"
 export ADMIN_PASSWORD="${ADMIN_PASSWORD:-${KEYCLOAK_ADMIN_PASSWORD:-admin}}"
@@ -22,7 +22,7 @@ export KC_HEALTH_ENABLED="${KC_HEALTH_ENABLED:-true}"
 export JAVA_OPTS_KC_HEAP="${JAVA_OPTS_KC_HEAP:--XX:InitialRAMPercentage=10 -XX:MaxRAMPercentage=25}"
 
 export USER_SERVICE_URL="${USER_SERVICE_URL:-http://127.0.0.1:8081}"
-export PRODUCT_SERVICE_URL="${PRODUCT_SERVICE_URL:-http://127.0.0.1:8080}"
+export PRODUCT_SERVICE_URL="${PRODUCT_SERVICE_URL:-http://127.0.0.1:8090}"
 export CART_SERVICE_URL="${CART_SERVICE_URL:-http://127.0.0.1:8082}"
 export WISHLIST_SERVICE_URL="${WISHLIST_SERVICE_URL:-http://127.0.0.1:8083}"
 export PAYMENT_SERVICE_URL="${PAYMENT_SERVICE_URL:-http://127.0.0.1:8084}"
@@ -153,33 +153,22 @@ echo "Starting Keycloak on port ${KEYCLOAK_PORT} using database ${KC_DB}"
   --http-port="${KEYCLOAK_PORT}" >"${LOG_DIR}/keycloak.log" 2>&1 &
 KEYCLOAK_PID=$!
 
-wait_for_http_ok "127.0.0.1" "${KEYCLOAK_PORT}" "/realms/mankind/.well-known/openid-configuration" "Keycloak" "${KEYCLOAK_WAIT_ATTEMPTS}" "${KEYCLOAK_PID}" "${LOG_DIR}/keycloak.log"
+(
+  if wait_for_http_ok "127.0.0.1" "${KEYCLOAK_PORT}" "/realms/mankind/.well-known/openid-configuration" "Keycloak" "${KEYCLOAK_WAIT_ATTEMPTS}" "${KEYCLOAK_PID}" "${LOG_DIR}/keycloak.log"; then
+    echo "Keycloak is ready"
+  else
+    echo "Keycloak is still unavailable; auth endpoints may fail until it starts." >&2
+  fi
+) &
 
 start_service "user-service" "8081" "${SERVICE_DIR}/user-service.jar"
-USER_SERVICE_PID=$LAST_STARTED_PID
-start_service "product-service" "8080" "${SERVICE_DIR}/product-service.jar"
-PRODUCT_SERVICE_PID=$LAST_STARTED_PID
+start_service "product-service" "8090" "${SERVICE_DIR}/product-service.jar"
 start_service "cart-service" "8082" "${SERVICE_DIR}/cart-service.jar"
-CART_SERVICE_PID=$LAST_STARTED_PID
 start_service "wishlist-service" "8083" "${SERVICE_DIR}/wishlist-service.jar"
-WISHLIST_SERVICE_PID=$LAST_STARTED_PID
 start_service "payment-service" "8084" "${SERVICE_DIR}/payment-service.jar"
-PAYMENT_SERVICE_PID=$LAST_STARTED_PID
 start_service "notification-service" "8086" "${SERVICE_DIR}/notification-service.jar"
-NOTIFICATION_SERVICE_PID=$LAST_STARTED_PID
 start_service "coupon-service" "8087" "${SERVICE_DIR}/coupon-service.jar"
-COUPON_SERVICE_PID=$LAST_STARTED_PID
 start_service "order-service" "8088" "${SERVICE_DIR}/order-service.jar"
-ORDER_SERVICE_PID=$LAST_STARTED_PID
-
-wait_for_tcp_port "127.0.0.1" "8081" "user-service" "${SERVICE_WAIT_ATTEMPTS}" "${USER_SERVICE_PID}" "${LOG_DIR}/user-service.log"
-wait_for_tcp_port "127.0.0.1" "8080" "product-service" "${SERVICE_WAIT_ATTEMPTS}" "${PRODUCT_SERVICE_PID}" "${LOG_DIR}/product-service.log"
-wait_for_tcp_port "127.0.0.1" "8082" "cart-service" "${SERVICE_WAIT_ATTEMPTS}" "${CART_SERVICE_PID}" "${LOG_DIR}/cart-service.log"
-wait_for_tcp_port "127.0.0.1" "8083" "wishlist-service" "${SERVICE_WAIT_ATTEMPTS}" "${WISHLIST_SERVICE_PID}" "${LOG_DIR}/wishlist-service.log"
-wait_for_tcp_port "127.0.0.1" "8084" "payment-service" "${SERVICE_WAIT_ATTEMPTS}" "${PAYMENT_SERVICE_PID}" "${LOG_DIR}/payment-service.log"
-wait_for_tcp_port "127.0.0.1" "8086" "notification-service" "${SERVICE_WAIT_ATTEMPTS}" "${NOTIFICATION_SERVICE_PID}" "${LOG_DIR}/notification-service.log"
-wait_for_tcp_port "127.0.0.1" "8087" "coupon-service" "${SERVICE_WAIT_ATTEMPTS}" "${COUPON_SERVICE_PID}" "${LOG_DIR}/coupon-service.log"
-wait_for_tcp_port "127.0.0.1" "8088" "order-service" "${SERVICE_WAIT_ATTEMPTS}" "${ORDER_SERVICE_PID}" "${LOG_DIR}/order-service.log"
 
 echo "Starting gateway on Render port ${PORT:-8085}"
 exec java ${COMMON_JAVA_OPTS} -Dserver.port="${PORT:-8085}" -jar "${SERVICE_DIR}/mankind-gateway-service.jar"
