@@ -14,15 +14,10 @@ export KEYCLOAK_PORT="${KEYCLOAK_PORT:-8080}"
 export KEYCLOAK_URL="${KEYCLOAK_URL:-http://127.0.0.1:${KEYCLOAK_PORT}}"
 export ADMIN_USERNAME="${ADMIN_USERNAME:-${KEYCLOAK_ADMIN:-admin}}"
 export ADMIN_PASSWORD="${ADMIN_PASSWORD:-${KEYCLOAK_ADMIN_PASSWORD:-admin}}"
-export KEYCLOAK_ADMIN="${KEYCLOAK_ADMIN:-${ADMIN_USERNAME}}"
-export KEYCLOAK_ADMIN_PASSWORD="${KEYCLOAK_ADMIN_PASSWORD:-${ADMIN_PASSWORD}}"
-export KC_BOOTSTRAP_ADMIN_USERNAME="${KC_BOOTSTRAP_ADMIN_USERNAME:-${KEYCLOAK_ADMIN}}"
-export KC_BOOTSTRAP_ADMIN_PASSWORD="${KC_BOOTSTRAP_ADMIN_PASSWORD:-${KEYCLOAK_ADMIN_PASSWORD}}"
-export KC_HEALTH_ENABLED="${KC_HEALTH_ENABLED:-true}"
-export JAVA_OPTS_KC_HEAP="${JAVA_OPTS_KC_HEAP:--XX:InitialRAMPercentage=10 -XX:MaxRAMPercentage=25}"
+export APP_SECURITY_OAUTH2_ENABLED="${APP_SECURITY_OAUTH2_ENABLED:-false}"
 
 export USER_SERVICE_URL="${USER_SERVICE_URL:-http://127.0.0.1:8081}"
-export PRODUCT_SERVICE_URL="${PRODUCT_SERVICE_URL:-http://127.0.0.1:8090}"
+export PRODUCT_SERVICE_URL="${PRODUCT_SERVICE_URL:-http://127.0.0.1:8080}"
 export CART_SERVICE_URL="${CART_SERVICE_URL:-http://127.0.0.1:8082}"
 export WISHLIST_SERVICE_URL="${WISHLIST_SERVICE_URL:-http://127.0.0.1:8083}"
 export PAYMENT_SERVICE_URL="${PAYMENT_SERVICE_URL:-http://127.0.0.1:8084}"
@@ -136,33 +131,8 @@ start_service() {
   LAST_STARTED_PID=$!
 }
 
-export KC_DB="${KC_DB:-dev-file}"
-
-if [ "${KC_DB}" = "mysql" ]; then
-  export KC_DB_URL="${KC_DB_URL:-jdbc:mysql://${DB_HOST}:${DB_PORT:-3306}/${DB_NAME}?useSSL=${DB_USE_SSL:-false}&allowPublicKeyRetrieval=${DB_ALLOW_PUBLIC_KEY_RETRIEVAL:-true}&serverTimezone=${DB_SERVER_TIMEZONE:-UTC}&autoReconnect=${DB_AUTO_RECONNECT:-true}}"
-  export KC_DB_USERNAME="${KC_DB_USERNAME:-${DB_USERNAME:-}}"
-  export KC_DB_PASSWORD="${KC_DB_PASSWORD:-${DB_PASSWORD:-}}"
-fi
-
-echo "Starting Keycloak on port ${KEYCLOAK_PORT} using database ${KC_DB}"
-
-/opt/keycloak/bin/kc.sh start-dev \
-  --import-realm \
-  --http-enabled=true \
-  --hostname-strict=false \
-  --http-port="${KEYCLOAK_PORT}" >"${LOG_DIR}/keycloak.log" 2>&1 &
-KEYCLOAK_PID=$!
-
-(
-  if wait_for_http_ok "127.0.0.1" "${KEYCLOAK_PORT}" "/realms/mankind/.well-known/openid-configuration" "Keycloak" "${KEYCLOAK_WAIT_ATTEMPTS}" "${KEYCLOAK_PID}" "${LOG_DIR}/keycloak.log"; then
-    echo "Keycloak is ready"
-  else
-    echo "Keycloak is still unavailable; auth endpoints may fail until it starts." >&2
-  fi
-) &
-
 start_service "user-service" "8081" "${SERVICE_DIR}/user-service.jar"
-start_service "product-service" "8090" "${SERVICE_DIR}/product-service.jar"
+start_service "product-service" "8080" "${SERVICE_DIR}/product-service.jar"
 start_service "cart-service" "8082" "${SERVICE_DIR}/cart-service.jar"
 start_service "wishlist-service" "8083" "${SERVICE_DIR}/wishlist-service.jar"
 start_service "payment-service" "8084" "${SERVICE_DIR}/payment-service.jar"
@@ -170,5 +140,6 @@ start_service "notification-service" "8086" "${SERVICE_DIR}/notification-service
 start_service "coupon-service" "8087" "${SERVICE_DIR}/coupon-service.jar"
 start_service "order-service" "8088" "${SERVICE_DIR}/order-service.jar"
 
+echo "Starting services without Keycloak; auth is disabled by default"
 echo "Starting gateway on Render port ${PORT:-8085}"
 exec java ${COMMON_JAVA_OPTS} -Dserver.port="${PORT:-8085}" -jar "${SERVICE_DIR}/mankind-gateway-service.jar"

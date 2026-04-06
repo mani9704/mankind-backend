@@ -15,9 +15,8 @@ RUN mvn -B -f notification-service/pom.xml clean package spring-boot:repackage -
 RUN mvn -B -f coupon-service/pom.xml clean package spring-boot:repackage -DskipTests
 RUN mvn -B -f order-service/pom.xml clean package spring-boot:repackage -DskipTests
 
-FROM quay.io/keycloak/keycloak:26.0.5
+FROM eclipse-temurin:17-jre-jammy
 
-USER root
 WORKDIR /opt/mankind
 
 COPY --from=build /workspace/user-service/target/*.jar /opt/mankind/services/user-service.jar
@@ -30,7 +29,6 @@ COPY --from=build /workspace/notification-service/target/*.jar /opt/mankind/serv
 COPY --from=build /workspace/coupon-service/target/*.jar /opt/mankind/services/coupon-service.jar
 COPY --from=build /workspace/order-service/target/*.jar /opt/mankind/services/order-service.jar
 
-COPY keycloak/mankind-realm.json /opt/keycloak/data/import/mankind-realm.json
 COPY scripts/start-render-stack.sh /opt/mankind/start-render-stack.sh
 
 RUN chmod +x /opt/mankind/start-render-stack.sh

@@ -2,6 +2,7 @@ package com.mankind.matrix_wishlistservice.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.web.SecurityFilterChain;
@@ -11,6 +12,12 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 @Configuration
 @EnableWebSecurity
 public class WebConfig implements WebMvcConfigurer {
+
+    private final boolean oauth2Enabled;
+
+    public WebConfig(@Value("${app.security.oauth2.enabled:false}") boolean oauth2Enabled) {
+        this.oauth2Enabled = oauth2Enabled;
+    }
 
     @Override
     public void addCorsMappings(CorsRegistry registry) {
@@ -32,8 +39,14 @@ public class WebConfig implements WebMvcConfigurer {
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-        http.csrf().disable()
-            .authorizeHttpRequests(authz -> authz
+        http.csrf().disable();
+
+        if (!oauth2Enabled) {
+            http.authorizeHttpRequests(authz -> authz.anyRequest().permitAll());
+            return http.build();
+        }
+
+        http.authorizeHttpRequests(authz -> authz
                 // Permit Swagger UI, OpenAPI docs, and actuator health/info
                 .requestMatchers(
                     "/swagger-ui/**",
