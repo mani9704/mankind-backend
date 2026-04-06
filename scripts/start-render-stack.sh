@@ -4,6 +4,9 @@ set -euo pipefail
 
 LOG_DIR="${LOG_DIR:-/tmp/mankind-logs}"
 SERVICE_DIR="/opt/mankind/services"
+WAIT_SLEEP_SECONDS="${WAIT_SLEEP_SECONDS:-2}"
+KEYCLOAK_WAIT_ATTEMPTS="${KEYCLOAK_WAIT_ATTEMPTS:-180}"
+SERVICE_WAIT_ATTEMPTS="${SERVICE_WAIT_ATTEMPTS:-120}"
 
 mkdir -p "$LOG_DIR"
 
@@ -46,22 +49,44 @@ cleanup() {
 
 trap cleanup EXIT
 
+print_log_tail() {
+  local file="$1"
+  local label="$2"
+
+  if [ -f "${file}" ]; then
+    echo "----- ${label} log tail -----" >&2
+    tail -n 200 "${file}" >&2 || true
+    echo "----- end ${label} log tail -----" >&2
+  else
+    echo "${label} log file not found at ${file}" >&2
+  fi
+}
+
 wait_for_tcp_port() {
   local host="$1"
   local port="$2"
   local label="$3"
+  local attempt_limit="$4"
+  local pid="${5:-}"
+  local log_file="${6:-}"
   local attempt=0
 
-  while [ "${attempt}" -lt 60 ]; do
+  while [ "${attempt}" -lt "${attempt_limit}" ]; do
     if (echo >"/dev/tcp/${host}/${port}") >/dev/null 2>&1; then
       echo "${label} is reachable on ${host}:${port}"
       return 0
     fi
+    if [ -n "${pid}" ] && ! kill -0 "${pid}" >/dev/null 2>&1; then
+      echo "${label} exited before opening ${host}:${port}" >&2
+      print_log_tail "${log_file}" "${label}"
+      return 1
+    fi
     attempt=$((attempt + 1))
-    sleep 2
+    sleep "${WAIT_SLEEP_SECONDS}"
   done
 
   echo "${label} did not open ${host}:${port} in time" >&2
+  print_log_tail "${log_file}" "${label}"
   return 1
 }
 
@@ -70,9 +95,12 @@ wait_for_http_ok() {
   local port="$2"
   local path="$3"
   local label="$4"
+  local attempt_limit="$5"
+  local pid="${6:-}"
+  local log_file="${7:-}"
   local attempt=0
 
-  while [ "${attempt}" -lt 60 ]; do
+  while [ "${attempt}" -lt "${attempt_limit}" ]; do
     if exec 3<>"/dev/tcp/${host}/${port}" 2>/dev/null; then
       printf 'GET %s HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n' "${path}" "${host}" >&3
       if IFS= read -r response <&3 && [[ "${response}" == *"200"* ]]; then
@@ -84,11 +112,17 @@ wait_for_http_ok() {
       exec 3<&-
       exec 3>&-
     fi
+    if [ -n "${pid}" ] && ! kill -0 "${pid}" >/dev/null 2>&1; then
+      echo "${label} exited before becoming ready on ${path}" >&2
+      print_log_tail "${log_file}" "${label}"
+      return 1
+    fi
     attempt=$((attempt + 1))
-    sleep 2
+    sleep "${WAIT_SLEEP_SECONDS}"
   done
 
   echo "${label} did not become ready on ${path}" >&2
+  print_log_tail "${log_file}" "${label}"
   return 1
 }
 
@@ -99,39 +133,53 @@ start_service() {
 
   echo "Starting ${name} on port ${port}"
   java ${COMMON_JAVA_OPTS} -Dserver.port="${port}" -jar "${jar}" >"${LOG_DIR}/${name}.log" 2>&1 &
+  LAST_STARTED_PID=$!
 }
 
-echo "Starting Keycloak on port ${KEYCLOAK_PORT}"
-export KC_DB="${KC_DB:-mysql}"
-export KC_DB_URL="${KC_DB_URL:-jdbc:mysql://${DB_HOST}:${DB_PORT:-3306}/${DB_NAME}?useSSL=${DB_USE_SSL:-false}&allowPublicKeyRetrieval=${DB_ALLOW_PUBLIC_KEY_RETRIEVAL:-true}&serverTimezone=${DB_SERVER_TIMEZONE:-UTC}&autoReconnect=${DB_AUTO_RECONNECT:-true}}"
-export KC_DB_USERNAME="${KC_DB_USERNAME:-${DB_USERNAME:-}}"
-export KC_DB_PASSWORD="${KC_DB_PASSWORD:-${DB_PASSWORD:-}}"
+export KC_DB="${KC_DB:-dev-file}"
+
+if [ "${KC_DB}" = "mysql" ]; then
+  export KC_DB_URL="${KC_DB_URL:-jdbc:mysql://${DB_HOST}:${DB_PORT:-3306}/${DB_NAME}?useSSL=${DB_USE_SSL:-false}&allowPublicKeyRetrieval=${DB_ALLOW_PUBLIC_KEY_RETRIEVAL:-true}&serverTimezone=${DB_SERVER_TIMEZONE:-UTC}&autoReconnect=${DB_AUTO_RECONNECT:-true}}"
+  export KC_DB_USERNAME="${KC_DB_USERNAME:-${DB_USERNAME:-}}"
+  export KC_DB_PASSWORD="${KC_DB_PASSWORD:-${DB_PASSWORD:-}}"
+fi
+
+echo "Starting Keycloak on port ${KEYCLOAK_PORT} using database ${KC_DB}"
 
 /opt/keycloak/bin/kc.sh start-dev \
   --import-realm \
   --http-enabled=true \
   --hostname-strict=false \
   --http-port="${KEYCLOAK_PORT}" >"${LOG_DIR}/keycloak.log" 2>&1 &
+KEYCLOAK_PID=$!
 
-wait_for_http_ok "127.0.0.1" "${KEYCLOAK_PORT}" "/realms/mankind/.well-known/openid-configuration" "Keycloak"
+wait_for_http_ok "127.0.0.1" "${KEYCLOAK_PORT}" "/realms/mankind/.well-known/openid-configuration" "Keycloak" "${KEYCLOAK_WAIT_ATTEMPTS}" "${KEYCLOAK_PID}" "${LOG_DIR}/keycloak.log"
 
 start_service "user-service" "8081" "${SERVICE_DIR}/user-service.jar"
+USER_SERVICE_PID=$LAST_STARTED_PID
 start_service "product-service" "8080" "${SERVICE_DIR}/product-service.jar"
+PRODUCT_SERVICE_PID=$LAST_STARTED_PID
 start_service "cart-service" "8082" "${SERVICE_DIR}/cart-service.jar"
+CART_SERVICE_PID=$LAST_STARTED_PID
 start_service "wishlist-service" "8083" "${SERVICE_DIR}/wishlist-service.jar"
+WISHLIST_SERVICE_PID=$LAST_STARTED_PID
 start_service "payment-service" "8084" "${SERVICE_DIR}/payment-service.jar"
+PAYMENT_SERVICE_PID=$LAST_STARTED_PID
 start_service "notification-service" "8086" "${SERVICE_DIR}/notification-service.jar"
+NOTIFICATION_SERVICE_PID=$LAST_STARTED_PID
 start_service "coupon-service" "8087" "${SERVICE_DIR}/coupon-service.jar"
+COUPON_SERVICE_PID=$LAST_STARTED_PID
 start_service "order-service" "8088" "${SERVICE_DIR}/order-service.jar"
+ORDER_SERVICE_PID=$LAST_STARTED_PID
 
-wait_for_tcp_port "127.0.0.1" "8081" "user-service"
-wait_for_tcp_port "127.0.0.1" "8080" "product-service"
-wait_for_tcp_port "127.0.0.1" "8082" "cart-service"
-wait_for_tcp_port "127.0.0.1" "8083" "wishlist-service"
-wait_for_tcp_port "127.0.0.1" "8084" "payment-service"
-wait_for_tcp_port "127.0.0.1" "8086" "notification-service"
-wait_for_tcp_port "127.0.0.1" "8087" "coupon-service"
-wait_for_tcp_port "127.0.0.1" "8088" "order-service"
+wait_for_tcp_port "127.0.0.1" "8081" "user-service" "${SERVICE_WAIT_ATTEMPTS}" "${USER_SERVICE_PID}" "${LOG_DIR}/user-service.log"
+wait_for_tcp_port "127.0.0.1" "8080" "product-service" "${SERVICE_WAIT_ATTEMPTS}" "${PRODUCT_SERVICE_PID}" "${LOG_DIR}/product-service.log"
+wait_for_tcp_port "127.0.0.1" "8082" "cart-service" "${SERVICE_WAIT_ATTEMPTS}" "${CART_SERVICE_PID}" "${LOG_DIR}/cart-service.log"
+wait_for_tcp_port "127.0.0.1" "8083" "wishlist-service" "${SERVICE_WAIT_ATTEMPTS}" "${WISHLIST_SERVICE_PID}" "${LOG_DIR}/wishlist-service.log"
+wait_for_tcp_port "127.0.0.1" "8084" "payment-service" "${SERVICE_WAIT_ATTEMPTS}" "${PAYMENT_SERVICE_PID}" "${LOG_DIR}/payment-service.log"
+wait_for_tcp_port "127.0.0.1" "8086" "notification-service" "${SERVICE_WAIT_ATTEMPTS}" "${NOTIFICATION_SERVICE_PID}" "${LOG_DIR}/notification-service.log"
+wait_for_tcp_port "127.0.0.1" "8087" "coupon-service" "${SERVICE_WAIT_ATTEMPTS}" "${COUPON_SERVICE_PID}" "${LOG_DIR}/coupon-service.log"
+wait_for_tcp_port "127.0.0.1" "8088" "order-service" "${SERVICE_WAIT_ATTEMPTS}" "${ORDER_SERVICE_PID}" "${LOG_DIR}/order-service.log"
 
 echo "Starting gateway on Render port ${PORT:-8085}"
 exec java ${COMMON_JAVA_OPTS} -Dserver.port="${PORT:-8085}" -jar "${SERVICE_DIR}/mankind-gateway-service.jar"
